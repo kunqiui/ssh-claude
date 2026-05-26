@@ -29,17 +29,24 @@ public actor TmuxManager {
 
     /// 确保有一个名为 sessionName 的会话；没有就新建并启动 claude。
     /// command 为空时只 new-session 不跑命令。
+    /// cwd 给 tmux new-session -c 用，让会话以指定目录为工作目录。
     @discardableResult
-    public func ensureSession(name: String, command: String? = nil) async throws -> TmuxSession {
+    public func ensureSession(name: String, command: String? = nil, cwd: String? = nil) async throws -> TmuxSession {
         let exists = try await sessionExists(name: name)
         if !exists {
             let escaped = shellEscape(name)
+            let cwdFlag: String
+            if let cwd, !cwd.isEmpty {
+                cwdFlag = " -c \(shellEscape(cwd))"
+            } else {
+                cwdFlag = ""
+            }
             if let command, !command.isEmpty {
                 // bash -i 加载 ~/.bashrc，确保 PATH 和环境变量（如 ANTHROPIC_API_KEY）可用
                 let wrappedCmd = shellEscape("bash -i -c \(shellEscape(command))")
-                _ = try await ssh.run("tmux new-session -d -s \(escaped) \(wrappedCmd)")
+                _ = try await ssh.run("tmux new-session -d -s \(escaped)\(cwdFlag) \(wrappedCmd)")
             } else {
-                _ = try await ssh.run("tmux new-session -d -s \(escaped)")
+                _ = try await ssh.run("tmux new-session -d -s \(escaped)\(cwdFlag)")
             }
         }
         let sessions = try await list()
@@ -47,6 +54,43 @@ public actor TmuxManager {
             throw TmuxError.sessionMissing(name)
         }
         return s
+    }
+
+    /// 列出指定目录下的子目录（一层）。返回 (name, isDir) 列表，按字母排序。
+    /// path 为空时使用 $HOME。
+    public func listDirectories(path: String) async throws -> [DirEntry] {
+        let target: String
+        if path.isEmpty {
+            target = "$HOME"
+        } else {
+            target = shellEscape(path)
+        }
+        // ls -1Ap：每行一项、显示隐藏文件、目录加 /
+        // 通过 / 后缀识别目录，过滤掉非目录
+        let cmd = "cd \(target) 2>/dev/null && pwd && ls -1Ap 2>/dev/null || true"
+        let out = try await ssh.run(cmd)
+        let lines = out.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        guard let absolute = lines.first, !absolute.isEmpty else {
+            return []
+        }
+        let entries = lines.dropFirst().compactMap { line -> DirEntry? in
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty else { return nil }
+            if trimmed.hasSuffix("/") {
+                let name = String(trimmed.dropLast())
+                guard !name.isEmpty else { return nil }
+                return DirEntry(name: name, isDirectory: true, parentPath: absolute)
+            }
+            return nil
+        }
+        return entries.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    /// 把 path 解析成绝对路径（处理 ~ 等）。
+    public func resolvePath(_ path: String) async throws -> String {
+        let target = path.isEmpty ? "$HOME" : shellEscape(path)
+        let cmd = "cd \(target) 2>/dev/null && pwd || true"
+        return try await ssh.run(cmd).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     public func sessionExists(name: String) async throws -> Bool {
@@ -81,6 +125,19 @@ public actor TmuxManager {
 
 public enum TmuxError: Error {
     case sessionMissing(String)
+}
+
+/// 远端目录浏览的一行
+public struct DirEntry: Identifiable, Hashable {
+    public var id: String { parentPath + "/" + name }
+    public let name: String
+    public let isDirectory: Bool
+    /// 当前 ls 时所在的绝对路径（pwd 输出）
+    public let parentPath: String
+    public var fullPath: String {
+        if parentPath.hasSuffix("/") { return parentPath + name }
+        return parentPath + "/" + name
+    }
 }
 
 nonisolated func shellEscape(_ s: String) -> String {

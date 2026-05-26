@@ -63,6 +63,27 @@ public class ConnectionManager: ObservableObject {
         try await tmux(hostId).ensureSession(name: sessionName, command: "claude")
     }
 
+    /// 在指定 cwd 下新建一个 claude 会话。cwd 为空时落到登录默认目录。
+    public func createClaudeSession(hostId: UUID, sessionName: String, cwd: String) async throws {
+        try await ensureConnected(hostId: hostId)
+        try await tmux(hostId).ensureSession(name: sessionName, command: "claude", cwd: cwd)
+    }
+
+    public func killSession(hostId: UUID, sessionName: String) async throws {
+        try await ensureConnected(hostId: hostId)
+        try await tmux(hostId).killSession(name: sessionName)
+    }
+
+    public func listDirectories(hostId: UUID, path: String) async throws -> [DirEntry] {
+        try await ensureConnected(hostId: hostId)
+        return try await tmux(hostId).listDirectories(path: path)
+    }
+
+    public func resolvePath(hostId: UUID, path: String) async throws -> String {
+        try await ensureConnected(hostId: hostId)
+        return try await tmux(hostId).resolvePath(path)
+    }
+
     public func capturePane(hostId: UUID, sessionName: String) async throws -> String {
         try await ensureConnected(hostId: hostId)
         return try await tmux(hostId).capturePane(session: sessionName)

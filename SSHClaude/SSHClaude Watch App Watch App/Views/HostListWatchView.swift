@@ -6,24 +6,18 @@ struct HostListWatchView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if !client.isReachable {
+                if client.hosts.isEmpty {
                     VStack(spacing: 8) {
-                        Image(systemName: "iphone.slash")
+                        Image(systemName: client.isReachable ? "plus.circle" : "iphone.gen3")
                             .font(.title2)
-                        Text("打开 iPhone 上的 SSHClaude")
+                        Text(client.isReachable
+                             ? "在 iPhone App 里添加服务器"
+                             : "请在 iPhone 上打开 SSHClaude\n首次连接需保持前台")
                             .font(.caption)
                             .multilineTextAlignment(.center)
                     }
                     .foregroundStyle(.secondary)
-                } else if client.hosts.isEmpty {
-                    VStack(spacing: 8) {
-                        Image(systemName: "plus.circle")
-                            .font(.title2)
-                        Text("在 iPhone App 里添加服务器")
-                            .font(.caption)
-                            .multilineTextAlignment(.center)
-                    }
-                    .foregroundStyle(.secondary)
+                    .padding()
                 } else {
                     List(client.hosts) { host in
                         NavigationLink(destination: SessionListWatchView(host: host)) {

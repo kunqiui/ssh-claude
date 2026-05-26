@@ -23,13 +23,13 @@ struct TerminalView: View {
                     .trimmingCharacters(in: .whitespaces)
                 if stripped.isEmpty { return false }
                 let lower = line.lowercased()
-                // 过滤 tip 提示行
-                if lower.hasPrefix("tip:") || lower.hasPrefix("※ tip:") { return false }
+                // 过滤 tip 提示行（前面可能有 ⎿ ※ 等装饰前缀和空格）
+                if lower.contains("tip:") { return false }
                 // 过滤底部快捷键提示（如 "? for shortcuts" / "ctrl+c to exit"）
                 if lower.contains("for shortcuts") { return false }
                 if lower.hasPrefix("?") && lower.contains("shortcut") { return false }
-                // 过滤 Claude 加载/状态行（如 "✻ Cogitating…" "✦ Thinking…"）
-                let statusChars: Set<Character> = ["✻", "✦", "✺", "✶", "✷", "✸"]
+                // 过滤 Claude 思考状态行（前缀池：· ✢ ✳ ✶ ✻ ✽，星星呼吸动画）
+                let statusChars: Set<Character> = ["·", "✢", "✳", "✶", "✻", "✽"]
                 if let first = line.first, statusChars.contains(first) { return false }
                 return true
             }

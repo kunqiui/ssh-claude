@@ -18,6 +18,11 @@ public class WatchClient: NSObject, ObservableObject, WCSessionDelegate {
         guard WCSession.isSupported() else { return }
         WCSession.default.delegate = self
         WCSession.default.activate()
+        // 启动时如果已有缓存的 applicationContext，直接读
+        if let data = WCSession.default.receivedApplicationContext["hosts"] as? Data,
+           let list = try? WatchCodec.decode([HostInfo].self, from: data) {
+            self.hosts = list
+        }
     }
 
     // MARK: - WCSessionDelegate
@@ -26,10 +31,27 @@ public class WatchClient: NSObject, ObservableObject, WCSessionDelegate {
                         activationDidCompleteWith state: WCSessionActivationState,
                         error: Error?) {
         isReachable = session.isReachable
+        // 激活后再读一次 context（有些场景需要）
+        let ctx = session.receivedApplicationContext
+        Task { @MainActor in
+            if let data = ctx["hosts"] as? Data,
+               let list = try? WatchCodec.decode([HostInfo].self, from: data) {
+                self.hosts = list
+            }
+        }
     }
 
     public func sessionReachabilityDidChange(_ session: WCSession) {
         isReachable = session.isReachable
+    }
+
+    /// iPhone 通过 updateApplicationContext 推过来的 hosts
+    public func session(_ session: WCSession,
+                        didReceiveApplicationContext applicationContext: [String: Any]) {
+        if let data = applicationContext["hosts"] as? Data,
+           let list = try? WatchCodec.decode([HostInfo].self, from: data) {
+            Task { @MainActor in self.hosts = list }
+        }
     }
 
     // iPhone 主动推送 pane 更新

@@ -10,18 +10,41 @@ public class WatchBridge: NSObject, ObservableObject, WCSessionDelegate {
     private override init() { super.init() }
 
     private let cm = ConnectionManager.shared
+    private var hostsSub: AnyCancellable?
 
     public func activate() {
         guard WCSession.isSupported() else { return }
         WCSession.default.delegate = self
         WCSession.default.activate()
+        // hosts 任何变化都推送到 Watch
+        hostsSub = cm.$hosts.sink { [weak self] hosts in
+            Task { @MainActor in self?.pushHostsToWatch(hosts) }
+        }
+    }
+
+    /// 把 hosts 通过 applicationContext 推到 Watch。
+    /// applicationContext 是持久的：即使 Watch App 没运行、iPhone 锁屏后台，
+    /// 都会在 Watch 下次启动时拿到最新一次的内容。
+    private func pushHostsToWatch(_ hosts: [HostInfo]) {
+        guard WCSession.default.activationState == .activated,
+              let data = try? WatchCodec.encode(hosts) else { return }
+        let context: [String: Any] = ["hosts": data]
+        do {
+            try WCSession.default.updateApplicationContext(context)
+        } catch {
+            print("updateApplicationContext failed: \(error)")
+        }
     }
 
     // MARK: - WCSessionDelegate
 
     public func session(_ session: WCSession,
                         activationDidCompleteWith state: WCSessionActivationState,
-                        error: Error?) {}
+                        error: Error?) {
+        Task { @MainActor in
+            self.pushHostsToWatch(self.cm.hosts)
+        }
+    }
 
     public func sessionDidBecomeInactive(_ session: WCSession) {}
     public func sessionDidDeactivate(_ session: WCSession) {

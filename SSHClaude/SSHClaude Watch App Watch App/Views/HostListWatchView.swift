@@ -11,7 +11,7 @@ struct HostListWatchView: View {
                         Image(systemName: client.isReachable ? "plus.circle" : "iphone.gen3")
                             .font(.title2)
                         Text(client.isReachable
-                             ? "在 iPhone App 里添加服务器"
+                             ? "请在 iPhone 上添加服务器"
                              : "请在 iPhone 上打开 SSHClaude\n首次连接需保持前台")
                             .font(.caption)
                             .multilineTextAlignment(.center)
@@ -30,7 +30,7 @@ struct HostListWatchView: View {
                     }
                 }
             }
-            .navigationTitle("SSH Claude")
+            .navigationTitle("SSHClaude")
         }
         .task { await client.fetchHosts() }
         .onChange(of: client.isReachable) { _, reachable in
@@ -54,14 +54,14 @@ struct SessionListWatchView: View {
                 Text("没有会话").foregroundStyle(.secondary)
             }
             if !claudeSessions.isEmpty {
-                Section("Claude") {
+                Section("Claude 会话") {
                     ForEach(claudeSessions) { s in
                         sessionLink(s)
                     }
                 }
             }
             if !otherSessions.isEmpty {
-                Section("其他") {
+                Section("其他会话") {
                     ForEach(otherSessions) { s in
                         sessionLink(s)
                     }

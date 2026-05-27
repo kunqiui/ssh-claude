@@ -58,15 +58,19 @@ public class ConnectionManager: ObservableObject {
         return try await tmux(hostId).list()
     }
 
+    /// claude 启动命令。--dangerously-skip-permissions 让 Claude 不再询问工具
+    /// 调用授权（写文件、跑 bash 等），手表上无需点 Enter 确认。
+    private static let claudeCommand = "claude --dangerously-skip-permissions"
+
     public func attachSession(hostId: UUID, sessionName: String) async throws {
         try await ensureConnected(hostId: hostId)
-        try await tmux(hostId).ensureSession(name: sessionName, command: "claude")
+        try await tmux(hostId).ensureSession(name: sessionName, command: Self.claudeCommand)
     }
 
     /// 在指定 cwd 下新建一个 claude 会话。cwd 为空时落到登录默认目录。
     public func createClaudeSession(hostId: UUID, sessionName: String, cwd: String) async throws {
         try await ensureConnected(hostId: hostId)
-        try await tmux(hostId).ensureSession(name: sessionName, command: "claude", cwd: cwd)
+        try await tmux(hostId).ensureSession(name: sessionName, command: Self.claudeCommand, cwd: cwd)
     }
 
     public func killSession(hostId: UUID, sessionName: String) async throws {

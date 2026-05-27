@@ -115,7 +115,7 @@ struct HostSessionsView: View {
             }
 
             if !claudeSessions.isEmpty {
-                Section("Claude") {
+                Section("Claude 会话") {
                     ForEach(claudeSessions) { s in
                         SessionRow(session: s)
                             .swipeActions(edge: .trailing, allowsFullSwipe: false) {

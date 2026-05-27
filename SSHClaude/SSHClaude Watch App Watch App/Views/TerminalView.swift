@@ -63,48 +63,39 @@ struct TerminalView: View {
             }
         }
         .safeAreaInset(edge: .bottom) {
-            VStack(spacing: 4) {
-                inputBar
-                keyRow
-            }
-            .padding(.horizontal, 4).padding(.bottom, 2)
+            keyRow
+                .padding(.horizontal, 4).padding(.bottom, 2)
         }
         .task { await client.attach(hostId: host.id, sessionName: session.name) }
         .sheet(isPresented: $showInputSheet) {
-            DictationInputView(initial: inputText) { text, submit in
+            DictationInputView(initial: inputText) { text in
                 Task {
                     await client.sendInput(hostId: host.id, sessionName: session.name,
-                                           text: text, submit: submit)
+                                           text: text, submit: true)
                 }
             }
         }
     }
 
-    private var inputBar: some View {
+    private var keyRow: some View {
+        HStack(spacing: 4) {
+            micBtn
+            clearBtn
+            keyBtn("escape", .escape, tint: .red)
+        }
+    }
+
+    private var micBtn: some View {
         Button {
             inputText = ""
             showInputSheet = true
         } label: {
-            HStack {
-                Image(systemName: "mic.fill")
-                Text("说话或输入").lineLimit(1)
-                Spacer()
-            }
-            .font(.caption)
-            .padding(.vertical, 6).padding(.horizontal, 8)
-            .background(Color.purple.opacity(0.25), in: Capsule())
+            Image(systemName: "mic.fill")
+                .font(.caption)
+                .frame(maxWidth: .infinity, minHeight: 22)
         }
-        .buttonStyle(.plain)
-    }
-
-    private var keyRow: some View {
-        HStack(spacing: 4) {
-            clearBtn
-            keyBtn("xmark.octagon.fill", .ctrlC)
-            keyBtn("chevron.up", .up)
-            keyBtn("chevron.down", .down)
-            keyBtn("return", .enter)
-        }
+        .buttonStyle(.bordered)
+        .tint(.purple)
     }
 
     private var clearBtn: some View {
@@ -115,14 +106,14 @@ struct TerminalView: View {
             }
         } label: {
             Text("/clear")
-                .font(.system(size: 8, design: .monospaced))
+                .font(.system(size: 9, design: .monospaced))
                 .frame(maxWidth: .infinity, minHeight: 22)
         }
         .buttonStyle(.bordered)
         .tint(.orange)
     }
 
-    private func keyBtn(_ icon: String, _ key: SpecialKey) -> some View {
+    private func keyBtn(_ icon: String, _ key: SpecialKey, tint: Color) -> some View {
         Button {
             Task { await client.sendKey(hostId: host.id, sessionName: session.name, key: key) }
         } label: {
@@ -130,7 +121,7 @@ struct TerminalView: View {
                 .frame(maxWidth: .infinity, minHeight: 22)
         }
         .buttonStyle(.bordered)
-        .tint(key == .ctrlC ? .red : .blue)
+        .tint(tint)
     }
 }
 
@@ -138,38 +129,29 @@ struct TerminalView: View {
 /// 不需要自己集成 SFSpeechRecognizer。
 struct DictationInputView: View {
     let initial: String
-    let onSubmit: (String, Bool) -> Void
+    let onSubmit: (String) -> Void
     @State private var text: String
     @Environment(\.dismiss) var dismiss
 
-    init(initial: String, onSubmit: @escaping (String, Bool) -> Void) {
+    init(initial: String, onSubmit: @escaping (String) -> Void) {
         self.initial = initial
         self.onSubmit = onSubmit
         self._text = State(initialValue: initial)
     }
 
     var body: some View {
-        VStack(spacing: 6) {
-            // 重要：watchOS 的 TextField 会弹系统输入面板（含听写）
+        VStack(spacing: 8) {
             TextField("输入或说话", text: $text, axis: .vertical)
                 .textFieldStyle(.plain)
                 .lineLimit(3...6)
-            HStack {
-                Button("取消") { dismiss() }.tint(.secondary)
-                Button {
-                    onSubmit(text, true)
-                    dismiss()
-                } label: {
-                    Label("发送", systemImage: "paperplane.fill")
-                }
-                .tint(.purple)
-                .disabled(text.isEmpty)
-            }
-            Button("发送但不回车") {
-                onSubmit(text, false)
+            Button {
+                onSubmit(text)
                 dismiss()
+            } label: {
+                Label("发送", systemImage: "paperplane.fill")
+                    .frame(maxWidth: .infinity)
             }
-            .font(.caption2)
+            .tint(.purple)
             .disabled(text.isEmpty)
         }
         .padding(.horizontal, 6)

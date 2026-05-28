@@ -10,6 +10,8 @@ struct SSHClaudeApp: App {
         // 没有 UI，.onAppear 不会触发，会导致 Watch 收不到响应（"没有会话"）。
         ConnectionManager.shared.loadHosts()
         WatchBridge.shared.activate()
+        // 启动时申请通知权限（首次会弹系统对话框）；Notifier 内部去重，重复调安全。
+        Task { @MainActor in Notifier.shared.ensureAuthorization() }
     }
 
     var body: some Scene {

@@ -12,6 +12,8 @@ public enum WatchMessageKind: String, Codable {
     case addCredential
     case listHosts
     case connectHost
+    case startMonitor
+    case stopMonitor
 
     // iPhone -> Watch
     case sessionsResult

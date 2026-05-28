@@ -127,6 +127,21 @@ public class WatchClient: NSObject, ObservableObject, WCSessionDelegate {
         handlePaneReply(reply)
     }
 
+    /// 让 iPhone 端开始轮询当前会话，"working → idle" 转移时发本地通知。
+    @MainActor
+    public func startMonitor(hostId: UUID, sessionName: String) async {
+        let req = AttachRequest(hostId: hostId, sessionName: sessionName)
+        guard let data = try? WatchCodec.encode(req) else { return }
+        let env = WatchEnvelope(kind: .startMonitor, payload: data)
+        _ = await send(env)
+    }
+
+    @MainActor
+    public func stopMonitor() async {
+        let env = WatchEnvelope(kind: .stopMonitor)
+        _ = await send(env)
+    }
+
     // MARK: - Helpers
 
     @MainActor

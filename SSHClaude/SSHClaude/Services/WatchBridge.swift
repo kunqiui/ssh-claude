@@ -128,6 +128,18 @@ public class WatchBridge: NSObject, ObservableObject, WCSessionDelegate {
                 let data = try WatchCodec.encode(hosts)
                 reply(WatchEnvelope(kind: .hostsResult, payload: data).toDictionary())
 
+            case .startMonitor:
+                guard let payload = env.payload,
+                      let req = try? WatchCodec.decode(AttachRequest.self, from: payload) else {
+                    reply(errorReply("缺少参数")); return
+                }
+                MonitorService.shared.start(hostId: req.hostId, sessionName: req.sessionName)
+                reply(WatchEnvelope(kind: .ack).toDictionary())
+
+            case .stopMonitor:
+                MonitorService.shared.stop()
+                reply(WatchEnvelope(kind: .ack).toDictionary())
+
             default:
                 reply(errorReply("不支持的消息类型: \(env.kind.rawValue)"))
             }

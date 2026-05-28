@@ -69,7 +69,15 @@ struct TerminalView: View {
             keyRow
                 .padding(.horizontal, 4).padding(.bottom, 2)
         }
-        .task { await client.attach(hostId: host.id, sessionName: session.name) }
+        .task {
+            await client.attach(hostId: host.id, sessionName: session.name)
+            // 让 iPhone 端开始轮询，Claude 任务完成时自动通知（通知会镜像到 Watch 震动）
+            await client.startMonitor(hostId: host.id, sessionName: session.name)
+        }
+        .onDisappear {
+            // 离开终端视图就停掉 iPhone 端的轮询，避免空跑耗电
+            Task { await client.stopMonitor() }
+        }
         .sheet(isPresented: $showInputSheet) {
             DictationInputView(initial: inputText) { text in
                 Task {

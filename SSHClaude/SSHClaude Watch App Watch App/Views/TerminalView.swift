@@ -8,32 +8,32 @@ struct TerminalView: View {
     @EnvironmentObject var client: WatchClient
     @State private var inputText = ""
     @State private var showInputSheet = false
+    @State private var showFunctionSheet = false
 
     private var paneLines: [String] {
         let raw = client.pane?.text ?? "正在加载…"
-        let lines = raw.components(separatedBy: "\n")
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { line in
-                guard !line.isEmpty else { return false }
-                // 过滤纯下划线分隔线（如 "___" "────" 等）
-                let stripped = line.replacingOccurrences(of: "_", with: "")
-                    .replacingOccurrences(of: "─", with: "")
-                    .replacingOccurrences(of: "-", with: "")
-                    .replacingOccurrences(of: "=", with: "")
-                    .trimmingCharacters(in: .whitespaces)
-                if stripped.isEmpty { return false }
-                let lower = line.lowercased()
-                // 过滤 tip 提示行（前面可能有 ⎿ ※ 等装饰前缀和空格）
-                if lower.contains("tip:") { return false }
-                // 过滤底部快捷键提示（如 "? for shortcuts" / "ctrl+c to exit"）
-                if lower.contains("for shortcuts") { return false }
-                if lower.hasPrefix("?") && lower.contains("shortcut") { return false }
-                // 过滤 Claude 思考状态行（前缀池：· ✢ ✳ ✶ ✻ ✽，星星呼吸动画）
-                let statusChars: Set<Character> = ["·", "✢", "✳", "✶", "✻", "✽"]
-                if let first = line.first, statusChars.contains(first) { return false }
-                return true
-            }
-        return lines.suffix(20).map { String($0) }
+        return PaneFilter.clean(raw, tailing: 40)
+    }
+
+    /// Claude TUI 的输入行：以 ">" 或 "❯" 开头（前面可能有空格）。
+    private func isInputLine(_ line: String) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        return trimmed.hasPrefix(">") || trimmed.hasPrefix("❯")
+    }
+
+    /// 经典终端配色：
+    /// - 输入行（"❯" 或 ">" 开头的 prompt）亮黄色 + 加粗，强对比
+    /// - Claude 工具调用结果行（"⎿" 等装饰）半透明绿，弱化
+    /// - 其他全是绿油油的输出
+    private func color(for line: String) -> Color {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        if trimmed.hasPrefix(">") || trimmed.hasPrefix("❯") {
+            return Color(red: 1.0, green: 0.92, blue: 0.3) // 亮黄
+        }
+        if trimmed.hasPrefix("⎿") {
+            return Color.green.opacity(0.55)
+        }
+        return Color(red: 0.4, green: 1.0, blue: 0.4) // phosphor green
     }
 
     var body: some View {
@@ -42,7 +42,9 @@ struct TerminalView: View {
                 LazyVStack(alignment: .leading, spacing: 1) {
                     ForEach(Array(paneLines.enumerated()), id: \.offset) { _, line in
                         Text(line)
-                            .font(.system(size: 9, design: .monospaced))
+                            .font(.system(size: 10, design: .monospaced)
+                                  .weight(isInputLine(line) ? .semibold : .regular))
+                            .foregroundStyle(color(for: line))
                             .fixedSize(horizontal: false, vertical: true)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
@@ -50,6 +52,7 @@ struct TerminalView: View {
                 }
                 .padding(.horizontal, 4)
             }
+            .background(Color.black)
             .onChange(of: client.pane?.timestamp) { _, _ in
                 withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
             }
@@ -75,14 +78,41 @@ struct TerminalView: View {
                 }
             }
         }
+        .sheet(isPresented: $showFunctionSheet) {
+            FunctionKeysView { action in
+                Task {
+                    switch action {
+                    case .clear:
+                        await client.sendInput(hostId: host.id, sessionName: session.name,
+                                               text: "/clear", submit: true)
+                    case .launchClaude:
+                        await client.sendInput(hostId: host.id, sessionName: session.name,
+                                               text: "claude --dangerously-skip-permissions", submit: true)
+                    case .key(let k):
+                        await client.sendKey(hostId: host.id, sessionName: session.name, key: k)
+                    }
+                }
+            }
+        }
     }
 
     private var keyRow: some View {
         HStack(spacing: 4) {
+            functionBtn
             micBtn
-            clearBtn
-            keyBtn("escape", .escape, tint: .red)
         }
+    }
+
+    private var functionBtn: some View {
+        Button {
+            showFunctionSheet = true
+        } label: {
+            Image(systemName: "command")
+                .font(.title3)
+                .frame(maxWidth: .infinity, minHeight: 30)
+        }
+        .buttonStyle(.bordered)
+        .tint(.orange)
     }
 
     private var micBtn: some View {
@@ -91,34 +121,51 @@ struct TerminalView: View {
             showInputSheet = true
         } label: {
             Image(systemName: "mic.fill")
-                .font(.caption)
-                .frame(maxWidth: .infinity, minHeight: 22)
+                .font(.title3)
+                .frame(maxWidth: .infinity, minHeight: 30)
         }
         .buttonStyle(.bordered)
         .tint(.purple)
     }
+}
 
-    private var clearBtn: some View {
-        Button {
-            Task {
-                await client.sendInput(hostId: host.id, sessionName: session.name,
-                                       text: "/clear", submit: true)
+enum FunctionAction {
+    case clear
+    case launchClaude
+    case key(SpecialKey)
+}
+
+/// 功能键面板：把不常用的按键收纳进来，主屏只留麦克风和功能入口。
+struct FunctionKeysView: View {
+    let onPick: (FunctionAction) -> Void
+    @Environment(\.dismiss) var dismiss
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 8) {
+                row(label: "claude", icon: "sparkles", tint: .purple, action: .launchClaude)
+                row(label: "/clear", tint: .orange, action: .clear)
+                row(label: "Enter", icon: "return", tint: .blue, action: .key(.enter))
+                row(label: "Esc", icon: "escape", tint: .red, action: .key(.escape))
+                row(label: "Up", icon: "chevron.up", tint: .blue, action: .key(.up))
+                row(label: "Down", icon: "chevron.down", tint: .blue, action: .key(.down))
             }
-        } label: {
-            Text("/clear")
-                .font(.system(size: 9, design: .monospaced))
-                .frame(maxWidth: .infinity, minHeight: 22)
+            .padding(.horizontal, 6)
         }
-        .buttonStyle(.bordered)
-        .tint(.orange)
     }
 
-    private func keyBtn(_ icon: String, _ key: SpecialKey, tint: Color) -> some View {
+    private func row(label: String, icon: String? = nil, tint: Color, action: FunctionAction) -> some View {
         Button {
-            Task { await client.sendKey(hostId: host.id, sessionName: session.name, key: key) }
+            onPick(action)
+            dismiss()
         } label: {
-            Image(systemName: icon).font(.caption)
-                .frame(maxWidth: .infinity, minHeight: 22)
+            HStack(spacing: 6) {
+                if let icon { Image(systemName: icon) }
+                Text(label).font(.system(.body, design: .monospaced))
+                Spacer()
+            }
+            .frame(maxWidth: .infinity, minHeight: 32)
+            .padding(.horizontal, 10)
         }
         .buttonStyle(.bordered)
         .tint(tint)

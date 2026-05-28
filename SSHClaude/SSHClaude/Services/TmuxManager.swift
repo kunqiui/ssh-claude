@@ -41,12 +41,13 @@ public actor TmuxManager {
             } else {
                 cwdFlag = ""
             }
+            // 先建空 session，让 tmux 用用户登录 shell 启动 pane（PATH 完整）。
+            // 再通过 send-keys 注入命令，等同于用户手动在 tmux 里输入。
+            // 注意：SSHClient.run 已经把整条命令包在 $SHELL -ilc 里，所以这里
+            // 直接写 "tmux ..." 即可，不需要再担心 PATH。
+            _ = try await ssh.run("tmux new-session -d -s \(escaped)\(cwdFlag)")
             if let command, !command.isEmpty {
-                // bash -i 加载 ~/.bashrc，确保 PATH 和环境变量（如 ANTHROPIC_API_KEY）可用
-                let wrappedCmd = shellEscape("bash -i -c \(shellEscape(command))")
-                _ = try await ssh.run("tmux new-session -d -s \(escaped)\(cwdFlag) \(wrappedCmd)")
-            } else {
-                _ = try await ssh.run("tmux new-session -d -s \(escaped)\(cwdFlag)")
+                _ = try await ssh.run("tmux send-keys -t \(escaped) \(shellEscape(command)) Enter")
             }
         }
         let sessions = try await list()
@@ -99,7 +100,7 @@ public actor TmuxManager {
         return out.contains("Y")
     }
 
-    public func capturePane(session: String, lines: Int = 40) async throws -> String {
+    public func capturePane(session: String, lines: Int = 120) async throws -> String {
         // 去掉 ANSI 转义，每行截到38字符（Watch 屏宽约38字符）
         let cmd = "tmux capture-pane -p -t \(shellEscape(session)) -S -\(lines) 2>/dev/null | sed 's/\\x1b\\[[0-9;]*[mGKHFJA-Z]//g' || true"
         return try await ssh.run(cmd)

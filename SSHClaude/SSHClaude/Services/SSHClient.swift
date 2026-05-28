@@ -58,8 +58,24 @@ public actor SSHClient {
 
     private func runOnce(_ command: String) async throws -> String {
         guard let client = inner else { throw SSHError.notConnected }
-        let bytes = try await client.executeCommand(command)
+        // 关键：SSH 非交互执行的 PATH 极简（/usr/bin:/bin:/usr/sbin:/sbin），
+        // brew/npm 装的工具（tmux、claude 等）通常在 /opt/homebrew/bin、
+        // /usr/local/bin、~/.npm-global/bin 里，必须包一层 login shell
+        // 才能拿到用户 .zprofile / .bash_profile / .profile 配置的 PATH。
+        //
+        // 注意：只用 -l（login）不用 -i（interactive）。-i 需要 TTY，但 SSH
+        // executeCommand 不分配 PTY，bash 会报 "cannot set terminal process
+        // group / no job control" 警告，Citadel 会把 stderr 当作 TTYSTDError 抛
+        // 出。zsh 容忍这个所以 mac 上 -ilc 能跑，Linux 的 bash 不容忍。
+        //
+        // 用 $SHELL 兼容 zsh（macOS 默认）和 bash（多数 Linux 默认）。
+        let wrapped = "$SHELL -lc \(Self.shellQuote(command))"
+        let bytes = try await client.executeCommand(wrapped)
         return String(buffer: bytes)
+    }
+
+    private static func shellQuote(_ s: String) -> String {
+        "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
     /// 判断错误是否表示底层连接/通道已经失效，需要重建。

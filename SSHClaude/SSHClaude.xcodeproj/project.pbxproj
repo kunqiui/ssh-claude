@@ -7,8 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		ACAC90A32FC4385D00DB5E5C /* SSHClaude Watch App Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = ACAC90992FC4385800DB5E5C /* SSHClaude Watch App Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		938DC454BD3D4ECB83ED5035 /* Citadel in Frameworks */ = {isa = PBXBuildFile; productRef = 9A4B5E764D8642838B033102 /* Citadel */; };
+		ACAC90A32FC4385D00DB5E5C /* SSHClaude Watch App Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = ACAC90992FC4385800DB5E5C /* SSHClaude Watch App Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -502,9 +502,6 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
-
-/* Begin XCLocalSwiftPackageReference section */
-/* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
 		071035955D5F4268A5E836C2 /* XCRemoteSwiftPackageReference "Citadel" */ = {
